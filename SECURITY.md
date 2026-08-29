@@ -1,25 +1,25 @@
-# Security policy
+# 安全说明
 
-## Supported versions
+## 支持的版本
 
-Only the latest commit on `main` receives fixes during the early preview.
+早期预览阶段，仅 `main` 上最新提交接受修复。
 
-## Reporting a vulnerability
+## 报告漏洞
 
-Use [GitHub private vulnerability reporting](https://github.com/qwertyzhu/ipc-jurisdiction/security/advisories/new).
+请使用 [GitHub 私密漏洞报告](https://github.com/qwertyzhu/ipc-jurisdiction/security/advisories/new)。
 
-Do **not** attach real complaints, business-registration extracts, notarial certificates, client identities, or case numbers to a public issue.
+**禁止**在公开 Issue 中附上真实起诉状、工商内档、公证书、客户身份或案号。
 
-## Data-handling boundary
+## 数据处理边界
 
-- The engine is designed for **local** processing. It does not call the network and does not write case logs.
-- Inputs should be province / city / district / amount / filing date — not a full case file.
-- Repository fixtures are public rules and fictional examples. Do not replace them with live matter files.
+- 引擎按**本地**处理设计。不访问网络，不写案件日志。
+- 输入应为省 / 市 / 区县 / 标的额 / 立案日期，而不是整本卷宗。
+- 仓库样例是公开规则与虚构例子。不要换成在办案件材料。
 
-## Accidental disclosure
+## 意外泄露
 
-If a live matter file is pushed:
+若误推了真实卷宗：
 
-1. rewrite git history (`git filter-repo`) only if you understand the impact;
-2. contact GitHub Support for cached commit removal if needed;
-3. follow your firm’s incident process for client data.
+1. 仅在理解影响后，才用 `git filter-repo` 改写历史；
+2. 必要时联系 GitHub Support 清除缓存提交；
+3. 按律所事件流程处理客户数据。

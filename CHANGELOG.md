@@ -1,12 +1,16 @@
-# Changelog
+# 更新日志
+
+## Unreleased
+
+- 贡献指南、安全说明与当前版本更新日志改为简体中文。
 
 ## 0.1.0 - 2026-08-29
 
-First public release of the information-network-dissemination-rights venue helper.
+信息网络传播权一审管辖助手首次公开发布。
 
-- Deterministic Python engine over Fa [2025] No. 167 (570 basic IP courts, provincial amount caps).
-- After 2025-11-01, online-copyright cases are not routed to internet courts (Fa Shi [2025] No. 14).
-- Tianjin Huayuan Science Park local override effective 2026-08-06, with three-state zone input (inside / outside / unknown).
-- 46 built-in `--selftest` cases.
-- Offline single-file HTML helper (2026-07-15 snapshot; does not include the Huayuan override).
-- Agent Skill (`SKILL.md`) for extract-then-lookup workflow.
+- 确定性 Python 引擎，依据法〔2025〕167 号（570 家基层知产法院、各省标的额上限）。
+- 2025-11-01 之后，涉网络著作权案件不再分给互联网法院（法释〔2025〕14 号）。
+- 天津华苑科技园局部例外自 2026-08-06 生效，园区输入为三态（园内 / 园外 / 未知）。
+- 内置 46 条 `--selftest` 用例。
+- 离线单文件 HTML 助手（2026-07-15 快照；不含华苑例外）。
+- Agent Skill（`SKILL.md`）覆盖「抽取连接点再查表」工作流。

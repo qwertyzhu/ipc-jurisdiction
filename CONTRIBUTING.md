@@ -1,23 +1,25 @@
-# Contributing
+# 贡献指南
 
-## Rules
+感谢你帮助改进信网权一审管辖助手。
 
-1. **Fictional data only** in tests, examples, and issue reports.
-2. Venue conclusions must come from `scripts/jurisdiction.py`, not from model memory.
-3. New court / cap / local-override data needs a source citation in the JSON and a `--selftest` case.
-4. Do not auto-detect special zones from address keywords.
-5. If a court cannot be locked, keep `precise: false` and lower confidence. Never invent a unique court name.
+## 规则
 
-## Dev
+1. 测试、样例和 Issue 里**只用虚构数据**。
+2. 管辖结论必须来自 `scripts/jurisdiction.py`，不得凭模型记忆作答。
+3. 新增法院 / 标的额门槛 / 局部例外数据，须在 JSON 里写明出处，并加一条 `--selftest` 用例。
+4. 不得用地址关键词自动判定特殊园区。
+5. 无法锁定唯一法院时，保持 `precise: false` 并降低置信度。不得编造法院名称。
+
+## 开发
 
 ```console
 python scripts/jurisdiction.py --selftest
 ```
 
-Change data or rules → add a selftest case → all  cases must pass before merging.
+改数据或规则 → 加自检用例 → 全部通过才能合并。
 
-## Pull requests
+## Pull request
 
-- Small, reviewable diffs
-- Update README / CHANGELOG when behavior changes
-- CI must pass on Ubuntu, Windows, and macOS across Python 3.10–3.12
+- 改动小、可审
+- 行为变化时更新 README / CHANGELOG
+- CI 须在 Ubuntu、Windows、macOS 的 Python 3.10–3.12 上通过
