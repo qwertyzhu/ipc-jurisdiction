@@ -1,0 +1,8 @@
+ipc-jurisdiction
+Copyright 2026 ipc-jurisdiction contributors
+
+Licensed under the Apache License, Version 2.0.
+
+Court lists and amount thresholds are transcribed from public judicial
+documents (notably SPC Fa [2025] No. 167). County-to-prefecture mappings
+are derived from modood/Administrative-divisions-of-China.

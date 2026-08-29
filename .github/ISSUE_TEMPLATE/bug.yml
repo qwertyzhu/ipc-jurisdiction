@@ -1,0 +1,30 @@
+name: Bug
+description: 功能问题（只用虚构地址与金额）
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **禁止**粘贴真实起诉状、工商内档、公证书、案号或客户姓名。
+        用省 / 市 / 区县 / 标的额复现即可。
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现命令
+      description: 完整的 `python scripts/jurisdiction.py ...` 命令（虚构参数）。
+      placeholder: python scripts/jurisdiction.py --def-prov 浙江省 --def-city 杭州市 --def-district 西湖区 --amount 800000 --text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
