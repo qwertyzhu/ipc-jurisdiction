@@ -53,6 +53,14 @@ def test_pages_html_is_chinese():
     assert any("\u4e00" <= ch <= "\u9fff" for ch in title)
 
 
+def test_page_does_not_calculate_courts():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+    assert "CITY_IP_COURT" not in html
+    assert "REGION_DATA" not in html
+    assert "以其为准" not in html
+    assert "不计算" in html
+
+
 def test_community_files_are_chinese_first():
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")

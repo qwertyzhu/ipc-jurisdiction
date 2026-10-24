@@ -9,7 +9,7 @@
 [![CI](https://github.com/qwertyzhu/ipc-jurisdiction/actions/workflows/ci.yml/badge.svg)](https://github.com/qwertyzhu/ipc-jurisdiction/actions/workflows/ci.yml)
 [![许可证](https://img.shields.io/github/license/qwertyzhu/ipc-jurisdiction)](LICENSE)
 
-- **免安装在线版**：[GitHub Pages 单页工具](https://qwertyzhu.github.io/ipc-jurisdiction/)（亦可双击本地 `docs/index.html` 离线使用）
+- **命令组装页**：[GitHub Pages](https://qwertyzhu.github.io/ipc-jurisdiction/)（亦可双击本地 `docs/index.html`）。该页只拼出命令，不计算法院
 - **早期预览**：**不替代律师判断**，不构成法律意见。立案前拨 12368 或向立案庭核对当期口径。
 
 ## 它解决什么问题
@@ -61,9 +61,9 @@ python scripts/jurisdiction.py --def-prov 天津市 --def-city 天津市 --def-d
 |---|---|---|---|
 | **AI Agent Skill**（推荐） | 智能体工作流（Claude Code / Codex / Trae / Antigravity 等） | **大模型抽参数 + 本地脚本查表 + 大模型写文书**。案卷需经云端大模型语义理解，注意商业秘密脱敏 | **现行**（含 2026-08-06 华苑调整） |
 | **本地命令行 (CLI)** | 开发者 / 批量处理 / 极致隐私需求 | 本地终端离线运行 `python scripts/jurisdiction.py`，不联网、不调用任何大模型、零数据上传 | **现行**（含 2026-08-06 华苑调整） |
-| **浏览器单页版** | 律师免 Python 环境快速点选查表 | 浏览器纯前端 JavaScript 本地计算，双击 `docs/index.html` 或访问网页，不上传后端 | 2026-07-15 快照，**不含华苑调整** |
+| **浏览器命令页** | 还没装 Python 时，先把参数拼成一条命令 | 只组装 `jurisdiction.py` 的参数，不判断法院、不上传数据 | 与仓库同步；计算一律以 Python 引擎为准 |
 
-> **Agent 纪律**：把本目录放到智能体的 `skills/` 下即加载 `SKILL.md`。**模型只抽参数和解读输出，禁止凭记忆算管辖。** 涉及天津南开 / 西青 / 华苑的案件，须使用现行 Python 引擎。
+> **Agent 纪律**：把本目录放到智能体的 `skills/` 下即加载 `SKILL.md`。**模型只抽参数和解读输出，禁止凭记忆算管辖。** 法院名以 Python 引擎输出为准。
 
 ## 覆盖范围
 
@@ -81,7 +81,7 @@ python scripts/jurisdiction.py --def-prov 天津市 --def-city 天津市 --def-d
 1. **辖区数据系附件表格图片识别所得**（附件无文字层），存在识别误差可能。关键案件抽查原附件。
 2. 各省高院可能另发细化文件；`local_venue_overrides.json` 只收录已核验的局部调整，不是全国穷尽。
 3. 华苑科技园公开四至描述存在道路名称差异。引擎不做门牌自动命中，边界地块须向 12368 / 立案庭确认。
-4. 浏览器单页版未同步华苑规则，见上表。
+4. 浏览器页不再内置第二套计算。旧页面会把中院案件指向知识产权法院，并漏掉局部管辖调整。
 
 程序对不确定性的处理是**主动降级并告警**：数据为推定值或未能锁定唯一法院时，输出 `confidence: low` 和 `precise: false`。`precise: false` 时不得在文书里写死法院名。
 
@@ -105,7 +105,7 @@ SKILL.md                      Agent 工作流与纪律
 scripts/jurisdiction.py       判定引擎（含 46 条 --selftest）
 data/                         法院、区划、标的额、排除规则、局部例外
 references/                   法条要点与文书模板
-docs/index.html               浏览器单页版
+docs/index.html               浏览器命令组装页（不计算法院）
 ```
 
 ## 安全与数据隐私

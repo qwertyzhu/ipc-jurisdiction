@@ -26,6 +26,12 @@ DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 
 # 该省级别管辖标准未收录时的通用推定阈值（元）
 GENERIC_BASIC = 1_000_000
+# 不是级别管辖门槛。低于 1 万元时，调用方经常把「100万」传成 100。
+# 法定赔偿可以低于 1 万元，因此只降置信度，不拒绝计算。
+SMALL_AMOUNT_YUAN = 10_000
+# 不是全国高院一审门槛。未收录 high_court_min 的省份，标的额达到这一金额时
+# 不得再以中等置信度锁定中院；低于这一金额的中院结论保持原置信度。
+HIGH_COURT_DATA_GAP_YUAN = 5_000_000_000
 
 
 def _load(name):
@@ -116,6 +122,14 @@ def local_rule_active(item, filing_date):
     if not filing_date:
         return True  # 默认任务是判断当前准备新立的案件
     return date.fromisoformat(filing_date) >= date.fromisoformat(item["effective_date"])
+
+
+def multiple_intermediate(province):
+    """一省有多家中院、不能拼出一个法院名时，返回数据里的占位说明。"""
+    info = (PROVINCES.get(province) or {}).get("intermediate_court") or {}
+    if info.get("status") == "multiple" and info.get("label") and info.get("warning"):
+        return info
+    return None
 
 
 def inter_name(x):
@@ -221,8 +235,52 @@ def fmt_wan(y):
     return (("%.6f" % w).rstrip("0").rstrip(".")) + "万元"
 
 
+def _apply_small_amount(result, amount):
+    """不足 1 万元时降置信度。调用方把万元数字直接传入时，会静默判成基层。"""
+    if not (isinstance(amount, (int, float)) and 0 < amount < SMALL_AMOUNT_YUAN):
+        return result
+    shown = int(amount) if amount == int(amount) else amount
+    corrected = shown * 10000
+    corrected_txt = str(int(corrected)) if corrected == int(corrected) else str(corrected)
+    result = dict(result)
+    result["warnings"] = list(result.get("warnings") or []) + [
+        "标的额按 %s 元（%s）计算。若材料中的数字以万元为单位，请改传 %s。"
+        "不足 1 万元时不维持中等置信度；法定赔偿可以低于 1 万元，确认单位后再使用结论。"
+        % (shown, fmt_wan(amount), corrected_txt)
+    ]
+    result["confidence"] = "low"
+    return result
+
+
+def _downgrade_if_high_court_unknown(result, province, amount):
+    """没有高院起点数据时，超大标的不得锁成中院。"""
+    if result.get("level") != "中级":
+        return result
+    if isinstance((PROVINCES.get(province) or {}).get("high_court_min"), (int, float)):
+        return result
+    if not isinstance(amount, (int, float)) or amount < HIGH_COURT_DATA_GAP_YUAN:
+        return result
+    result = dict(result)
+    result["level"] = "中级或高级"
+    result["confidence"] = "low"
+    result["reason"] = (
+        "标的额 %s 已超过基层受理上限，但本省高级人民法院一审起点未收录，"
+        "不能在中级人民法院与高级人民法院之间锁定" % fmt_wan(amount))
+    result["warnings"] = list(result.get("warnings") or []) + [
+        "本省高级人民法院一审起点未收录。50亿元不是全国统一门槛，只是缺少该数据时的降级线，"
+        "达到该金额不得把某一家中级人民法院写成已经锁定的管辖法院。"
+    ]
+    return result
+
+
 def decide_level(province, city, amount, is_foreign=False):
     """判定级别管辖。返回 dict: level / confidence / reason / warnings"""
+    result = _decide_level(province, city, amount, is_foreign)
+    result = _downgrade_if_high_court_unknown(result, province, amount)
+    return _apply_small_amount(result, amount)
+
+
+def _decide_level(province, city, amount, is_foreign=False):
     # 标的额是级别管辖的唯一决定因素。缺失时不得静默按 0 处理——那等于
     # 默认判成基层法院，会把本该由中院管辖的案件算错。
     # 门槛按法〔2025〕167号附件「不含本数」，故此处用严格小于。
@@ -355,6 +413,15 @@ def court_for_place(province, city, district, amount, is_foreign=False,
                 "confidence": lv["confidence"], "precise": True,
                 "extra": extra + note, "warnings": warnings}
 
+    if lv["level"] == "中级或高级":
+        warnings.append(
+            "信息网络传播权侵权民事案件不属知识产权法院管辖范围，不得改写到知识产权法院"
+            "（计算机软件著作权案件除外）")
+        return {"court": "%s有管辖权的中级人民法院或高级人民法院" % province,
+                "level": "中级或高级人民法院", "reason": lv["reason"],
+                "confidence": "low", "precise": False,
+                "extra": extra + "级别未在中院与高院之间锁定", "warnings": warnings}
+
     if zone_state == "special":
         if lv["level"] == "中级":
             court = zone_override["intermediate_court"]
@@ -425,13 +492,17 @@ def court_for_place(province, city, district, amount, is_foreign=False,
 
     if lv["level"] == "中级":
         legacy_intermediate = ((legacy_override or {}).get("pre_effective_current_snapshot") or {}).get("intermediate_court")
-        court = legacy_intermediate or inter_name(std_city)
-        precise = bool(legacy_intermediate)
-        if not legacy_intermediate and province == "天津市" and norm_city(std_city) == "天津":
-            # 天津存在多个中院；在没有局部规则或更细分片数据时，不得编造一个
-            # 实际并不存在的单一「天津市中级人民法院」。
-            court = "天津市有管辖权的中级人民法院"
-            warnings.append("天津市设有多个中级人民法院，普通区域的中院分片尚未锁定，须按完整地址向12368复核")
+        # 名称能由地级市唯一确定时 precise 为真。多家中院的省级行政区只给占位，
+        # 不拼出一个实际上不存在的「某市中级人民法院」。
+        if legacy_intermediate:
+            court, precise = legacy_intermediate, True
+        else:
+            multi = multiple_intermediate(province)
+            if multi:
+                court, precise = multi["label"], False
+                warnings.append(multi["warning"])
+            else:
+                court, precise = inter_name(std_city), True
         warnings.append(
             "信息网络传播权侵权民事案件不属知识产权法院管辖范围，达到中院级别标准的应向普通中级人民法院起诉"
             "（计算机软件著作权案件除外）")
@@ -486,7 +557,7 @@ def build_options(inp):
                         "最稳妥通道，管辖异议风险最低。"))
 
     if inp.get("server_city"):
-        r = court_for_place(inp.get("server_prov") or inp.get("def_prov"), inp["server_city"],
+        r = court_for_place(inp.get("server_prov"), inp["server_city"],
                             inp.get("server_district", ""), amount, fo,
                             inp.get("server_zone", ""), inp.get("server_no_special_zone", False),
                             inp.get("filing_date", ""), "--server-zone", "--server-no-special-zone")
@@ -559,6 +630,14 @@ def analyze(inp):
                         "input": inp, "options": [], "overall_confidence": "low", "warnings": []}
             inp[key] = fixed
 
+    for prefix, label in (("server", "侵权行为地"), ("pl", "原告发现地")):
+        has_place = any(inp.get(prefix + "_" + part) for part in ("city", "district", "zone"))
+        if has_place and not inp.get(prefix + "_prov"):
+            flag = "--%s-prov" % prefix
+            return {"error": "已填写%s，但没有 %s。不能用被告所在省代替，否则会在错误的省表里查法院。"
+                             % (label, flag),
+                    "input": inp, "options": [], "overall_confidence": "low", "warnings": []}
+
     for prefix in ("def", "server", "pl"):
         zone = inp.get(prefix + "_zone")
         if not zone:
@@ -594,12 +673,14 @@ def analyze(inp):
                 all_w.append(w)
     conf = [o["confidence"] for o in opts]
     overall = "low" if (not opts or "low" in conf) else ("medium" if "medium" in conf else "high")
-    return {"input": inp, "options": opts, "overall_confidence": overall,
-            "warnings": all_w,
-            "disclaimer": "本结论由查表计算得出。全国标的额门槛与基层辖区名单据法〔2025〕167号附件"
+    result = {"input": inp, "options": opts, "overall_confidence": overall,
+              "warnings": all_w,
+              "amount_yuan": amount, "amount_display": fmt_wan(amount),
+              "disclaimer": "本结论由查表计算得出。全国标的额门槛与基层辖区名单据法〔2025〕167号附件"
                           "（2025-09-23 发布，2025-10-01 施行；同时废止法〔2022〕109号）；"
                           "经批准的局部区域调整另据 data/local_venue_overrides.json。"
                           "立案前应复核标的法院当期立案口径及特殊区域边界。"}
+    return result
 
 
 # ---------- 输出 ----------
@@ -626,6 +707,10 @@ def to_text(res):
     if res.get("error"):
         return "输入有误：" + res["error"]
     L = []
+    amt = (res.get("input") or {}).get("amount")
+    if isinstance(amt, (int, float)) and amt > 0:
+        shown = int(amt) if amt == int(amt) else amt
+        L.append("标的额：%s 元（%s）" % (shown, res.get("amount_display") or fmt_wan(amt)))
     L.append("信息网络传播权纠纷 · 一审管辖分析")
     L.append("整体置信度：%s" % {"high": "高", "medium": "中", "low": "低"}[res["overall_confidence"]])
     L.append("")
@@ -669,7 +754,10 @@ def selftest():
          lambda r: "互联网法院" not in r["options"][0]["court"]),
         ("浙江超500万应升中院，且不得走知产法院",
          {"def_prov": "浙江省", "def_city": "杭州市", "def_district": "西湖区", "amount": 6_000_000},
-         lambda r: r["options"][0]["level"] == "中级人民法院"
+         lambda r: r["options"][0]["court"] == "杭州市中级人民法院"
+                   and r["options"][0]["level"] == "中级人民法院"
+                   and r["options"][0]["precise"] is True
+                   and r["options"][0]["confidence"] == "medium"
                    and "知识产权法院" not in r["options"][0]["court"]),
         ("京沪 noCap：标的额再大也留在基层",
          {"def_prov": "上海市", "def_city": "上海市", "def_district": "浦东新区", "amount": 20_000_000},
@@ -694,7 +782,8 @@ def selftest():
          lambda r: r["options"][0]["level"] == "基层人民法院"),
         ("以「州」结尾的普通地级市，中院名须含「市」",
          {"def_prov": "江苏省", "def_city": "苏州市", "def_district": "虎丘区", "amount": 8_000_000},
-         lambda r: r["options"][0]["court"] == "苏州市中级人民法院"),
+         lambda r: r["options"][0]["court"] == "苏州市中级人民法院"
+                   and r["options"][0]["precise"] is True),
         ("自治州中院名不含「市」",
          {"def_prov": "吉林省", "def_city": "延吉市", "amount": 5_000_000},
          lambda r: r["options"][0]["court"].endswith("自治州中级人民法院")),
@@ -853,6 +942,43 @@ def selftest():
           "def_no_special_zone": True, "amount": 500_000},
          lambda r: LOCAL_OVERRIDES["zones"][0]["intermediate_upper_exclusive"]
                    == PROVINCES["天津市"]["high_court_min"]),
+        ("文本输出第一行同时给出元和万元",
+         {"def_prov": "浙江省", "def_city": "杭州市", "def_district": "西湖区", "amount": 800_000},
+         lambda r: to_text(r).startswith("标的额：800000 元（80万元）")
+                   and r["amount_yuan"] == 800_000
+                   and r["amount_display"] == "80万元"),
+        ("不足1万元不得维持中等置信度",
+         {"def_prov": "浙江省", "def_city": "杭州市", "def_district": "西湖区", "amount": 100},
+         lambda r: r["options"][0]["confidence"] == "low"
+                   and r["options"][0]["court"] == "杭州市西湖区人民法院"
+                   and any("1000000" in w and "万元" in w for w in r["warnings"])),
+        ("重庆多家中院时不得拼出不存在的重庆市中级人民法院",
+         {"def_prov": "重庆市", "def_city": "重庆市", "def_district": "渝中区", "amount": 6_000_000},
+         lambda r: r["options"][0]["court"] == "重庆市有管辖权的中级人民法院"
+                   and r["options"][0]["precise"] is False
+                   and "重庆市中级人民法院" not in r["options"][0]["court"]),
+        ("未收录高院起点且标的额达50亿元时不锁定中院",
+         {"def_prov": "广东省", "def_city": "深圳市", "def_district": "南山区", "amount": 5_000_000_000},
+         lambda r: r["options"][0]["precise"] is False
+                   and r["options"][0]["confidence"] == "low"
+                   and r["options"][0]["court"] == "广东省有管辖权的中级人民法院或高级人民法院"
+                   and "深圳市中级人民法院" not in r["options"][0]["court"]),
+        ("50亿元降级线以下仍锁定唯一中院",
+         {"def_prov": "广东省", "def_city": "深圳市", "def_district": "南山区", "amount": 20_000_000},
+         lambda r: r["options"][0]["court"] == "深圳市中级人民法院"
+                   and r["options"][0]["precise"] is True
+                   and r["options"][0]["confidence"] == "medium"),
+        ("侵权行为地缺少省级时必须报错，不得改用被告所在省",
+         {"def_prov": "浙江省", "def_city": "杭州市", "def_district": "西湖区",
+          "server_city": "天津市", "amount": 500_000},
+         lambda r: bool(r.get("error")) and not r["options"] and "server-prov" in r["error"]),
+        ("基层法院共570家，court_entries是辖区格数不是法院家数",
+         {"def_prov": "浙江省", "def_city": "杭州市", "def_district": "西湖区", "amount": 800_000},
+         lambda r: sum(len(v.get("courts", [])) for v in COURTS.values()) == 570
+                   and all(
+                       sum(len(ct.get("a", [])) for ct in COURTS.get(name, {}).get("courts", []))
+                       == meta.get("court_entries")
+                       for name, meta in PROVINCES.items())),
     ]
     ok = 0
     for name, inp, check in cases:
